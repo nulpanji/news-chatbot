@@ -31,53 +31,6 @@ RSS_FEEDS = {
 
 translator = Translator()
 
-def fetch_and_translate_news(category, keyword=None, max_articles=5, translate_to_ko=False):
-    articles = []
-    feeds = RSS_FEEDS.get(category, [])
-    for url in feeds:
-        feed = feedparser.parse(url)
-        for entry in feed.entries[:max_articles]:
-            title = entry.title
-            summary = entry.summary if 'summary' in entry else ''
-            link = entry.link
-            # 기사 언어 감지 (간단: 한국 언론사면 한글, 아니면 영어)
-            is_korean_news = any(domain in url for domain in [
-                'yna.co.kr', 'hani.co.kr', 'donga.com', 'chosun.com', 'naver.com', 'hankyung.com'
-            ])
-            if translate_to_ko or not is_korean_news:
-                try:
-                    title_ko = translator.translate(title, dest='ko').text if not is_korean_news else title
-                except Exception:
-                    title_ko = title
-                try:
-                    summary_ko = translator.translate(summary, dest='ko').text if summary and not is_korean_news else summary
-                except Exception:
-                    summary_ko = summary
-            else:
-                title_ko = title
-                summary_ko = summary
-            # 키워드 필터
-            if keyword:
-                if keyword.lower() not in title_ko.lower() and keyword.lower() not in summary_ko.lower():
-                    continue
-            articles.append({
-                'title': title_ko,
-                'summary': summary_ko,
-                'link': link,
-                'source': feed.feed.title if 'title' in feed.feed else url
-            })
-    return articles
-
-# Streamlit 웹챗봇 UI
-st.title("🌏 실시간 뉴스 챗봇")
-st.write("카테고리와(선택) 키워드를 입력하면 관련 뉴스를 한국어 또는 원본으로 요약해 드립니다.")
-
-col1, col2 = st.columns([1,2])
-category = col1.selectbox("카테고리", list(RSS_FEEDS.keys()))
-keyword = col2.text_input("키워드(선택)", "")
-lang_option = st.radio("기사 언어 선택", ["원본(영어/한국어)", "모든 기사 한국어로 번역"], horizontal=True)
-translate_to_ko = lang_option == "모든 기사 한국어로 번역"
-
 def fetch_and_translate_news(category, keyword=None, max_articles=20, translate_to_ko=False):
     articles = []
     feeds = RSS_FEEDS.get(category, [])
@@ -117,6 +70,16 @@ def fetch_and_translate_news(category, keyword=None, max_articles=20, translate_
                 'source': feed.feed.title if 'title' in feed.feed else url
             })
     return articles
+
+# Streamlit 웹챗봇 UI
+st.title("🌏 실시간 뉴스 챗봇")
+st.write("카테고리와(선택) 키워드를 입력하면 관련 뉴스를 한국어 또는 원본으로 요약해 드립니다.")
+
+col1, col2 = st.columns([1,2])
+category = col1.selectbox("카테고리", list(RSS_FEEDS.keys()))
+keyword = col2.text_input("키워드(선택)", "")
+lang_option = st.radio("기사 언어 선택", ["원본(영어/한국어)", "모든 기사 한국어로 번역"], horizontal=True)
+translate_to_ko = lang_option == "모든 기사 한국어로 번역"
 
 if st.button("뉴스 찾기"):
     with st.spinner("뉴스를 불러오는 중..."):

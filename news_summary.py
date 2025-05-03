@@ -1,6 +1,3 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import webbrowser
 import streamlit as st
 import feedparser
 from googletrans import Translator

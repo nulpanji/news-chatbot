@@ -139,12 +139,12 @@ def fetch_weather(city="Seoul"):
     except Exception:
         return f"{city}: N/A"
 
-def fetch_and_translate_news(category, keyword=None, translate_to_ko=False):
+def fetch_and_translate_news(keyword=None, translate_to_ko=False):
     articles = []
-    feeds = RSS_FEEDS.get(category, [])
     now = datetime.datetime.utcnow()
     one_month_ago = now - datetime.timedelta(days=31)
-    for url in feeds:
+    all_feeds = sum(RSS_FEEDS.values(), [])
+    for url in all_feeds:
         feed = feedparser.parse(url)
         for entry in feed.entries:
             # 날짜 파싱
@@ -247,15 +247,13 @@ with col4:
     st.metric("서울 날씨", fetch_weather("Seoul"))
 
 # ---- 뉴스 검색 UI ----
-col1, col2 = st.columns([1,2])
-category = col1.selectbox("카테고리", list(RSS_FEEDS.keys()))
-keyword = col2.text_input("키워드(선택)", "")
+keyword = st.text_input("키워드로 뉴스 검색 (카테고리 구분 없음)", "")
 lang_option = st.radio("기사 언어 선택", ["원본(영어/한국어)", "모든 기사 한국어로 번역"], horizontal=True)
 translate_to_ko = lang_option == "모든 기사 한국어로 번역"
 
 if st.button("뉴스 찾기"):
     with st.spinner("뉴스를 불러오는 중..."):
-        articles = fetch_and_translate_news(category, keyword.strip(), translate_to_ko=translate_to_ko)
+        articles = fetch_and_translate_news(keyword.strip(), translate_to_ko=translate_to_ko)
     if not articles:
         st.warning("관련 뉴스가 없습니다.")
     else:

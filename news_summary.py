@@ -3,11 +3,6 @@ import feedparser
 from googletrans import Translator
 import datetime
 import re
-import yfinance as yf
-import requests
-import re
-import yfinance as yf
-import requests
 
 # 신뢰 언론사 RSS 피드 (글로벌 + 한국)
 RSS_FEEDS = {
@@ -89,55 +84,7 @@ def fetch_hot_news():
     return articles[:10]  # 상위 10건만
 
 # 실시간 주식 시세 (Yahoo Finance)
-def fetch_stock_price(symbol):
-    try:
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period="1d")
-        if not data.empty:
-            price = data['Close'].iloc[-1]
-            return f"{price:,.2f}"
-        else:
-            return "N/A"
-    except Exception:
-        return "N/A"
 
-# 실시간 코인 시세 (CoinGecko)
-def fetch_crypto_price(symbol):
-    try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=krw,usd"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-        price_krw = data[symbol]['krw']
-        price_usd = data[symbol]['usd']
-        return f"₩{price_krw:,} / ${price_usd:,}"
-    except Exception:
-        return "N/A"
-
-# 실시간 환율 (USD/KRW, EUR/KRW, Yahoo Finance)
-def fetch_fx_rate(pair):
-    try:
-        ticker = yf.Ticker(pair)
-        data = ticker.history(period="1d")
-        if not data.empty:
-            rate = data['Close'].iloc[-1]
-            return f"{rate:,.2f}"
-        else:
-            return "N/A"
-    except Exception:
-        return "N/A"
-
-# 실시간 날씨 (OpenWeatherMap)
-OPENWEATHER_API_KEY = "b28b5663f60a009761ddeb6059a824fe"
-def fetch_weather(city="Seoul"):
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=kr"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-        temp = data['main']['temp']
-        desc = data['weather'][0]['description']
-        return f"{city}: {temp}°C, {desc}"
-    except Exception:
-        return f"{city}: N/A"
 
 def fetch_and_translate_news(keyword=None, translate_to_ko=False):
     articles = []

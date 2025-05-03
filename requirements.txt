@@ -8,5 +8,4 @@ webdriver-manager==4.0.1
 feedparser
 googletrans==4.0.0-rc1
 streamlit
-yfinance
-requests==2.31.0
+yfinance==0.2.37

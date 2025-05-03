@@ -1,6 +1,7 @@
 import streamlit as st
 import feedparser
 from googletrans import Translator
+import datetime
 
 # 신뢰 언론사 RSS 피드 (글로벌 + 한국)
 RSS_FEEDS = {
@@ -31,14 +32,33 @@ RSS_FEEDS = {
 
 translator = Translator()
 
-def fetch_and_translate_news(category, keyword=None, max_articles=20, translate_to_ko=False):
+def fetch_and_translate_news(category, keyword=None, translate_to_ko=False):
     articles = []
     feeds = RSS_FEEDS.get(category, [])
+    now = datetime.datetime.utcnow()
+    one_month_ago = now - datetime.timedelta(days=31)
     for url in feeds:
         feed = feedparser.parse(url)
-        for entry in feed.entries[:max_articles]:
+        for entry in feed.entries:
+            # 날짜 파싱
+            pub_date = None
+            for date_key in ['published_parsed', 'updated_parsed']:
+                if date_key in entry and entry[date_key]:
+                    pub_date = datetime.datetime(*entry[date_key][:6])
+                    break
+            if not pub_date:
+                continue
+            # 한 달 이내만
+            if pub_date < one_month_ago:
+                continue
             title = entry.title
-            summary = entry.summary if 'summary' in entry else ''
+            # content 우선, 없으면 summary
+            if 'content' in entry and entry.content:
+                summary = entry.content[0].value
+            elif 'summary' in entry:
+                summary = entry.summary
+            else:
+                summary = ''
             link = entry.link
             is_korean_news = any(domain in url for domain in [
                 'yna.co.kr', 'hani.co.kr', 'donga.com', 'chosun.com', 'naver.com', 'hankyung.com'
@@ -67,8 +87,11 @@ def fetch_and_translate_news(category, keyword=None, max_articles=20, translate_
                 'title': title_ko,
                 'summary': summary_ko,
                 'link': link,
-                'source': feed.feed.title if 'title' in feed.feed else url
+                'source': feed.feed.title if 'title' in feed.feed else url,
+                'pub_date': pub_date
             })
+    # 최신순 정렬 (맨 위가 최신)
+    articles.sort(key=lambda x: x['pub_date'], reverse=True)
     return articles
 
 # Streamlit 웹챗봇 UI
@@ -91,5 +114,5 @@ if st.button("뉴스 찾기"):
             st.markdown(f"**{i}. [{art['title']}]({art['link']})**")
             if art['summary']:
                 st.write(f"요약: {art['summary']}")
-            st.caption(f"출처: {art['source']}")
+            st.caption(f"출처: {art['source']} | 날짜: {art['pub_date'].strftime('%Y-%m-%d %H:%M')}")
             st.write("---")

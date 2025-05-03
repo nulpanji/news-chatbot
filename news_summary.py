@@ -230,25 +230,9 @@ with st.expander("🔥 실시간 속보/Hot News (최근 2일)", expanded=True):
             st.caption(f"출처: {art['source']} | 날짜: {art['pub_date'].strftime('%Y-%m-%d %H:%M')}")
             st.write("---")
 
-st.subheader(":chart_with_upwards_trend: 실시간 시세/환율/날씨")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("테슬라(TSLA)", fetch_stock_price("TSLA"))
-    st.metric("엔비디아(NVDA)", fetch_stock_price("NVDA"))
-with col2:
-    st.metric("삼성전자(005930.KS)", fetch_stock_price("005930.KS"))
-    st.metric("비트코인(BTC)", fetch_crypto_price("bitcoin"))
-with col3:
-    st.metric("이더리움(ETH)", fetch_crypto_price("ethereum"))
-    st.metric("XRP", fetch_crypto_price("ripple"))
-with col4:
-    st.metric("USD/KRW", fetch_fx_rate("USDKRW=X"))
-    st.metric("EUR/KRW", fetch_fx_rate("EURKRW=X"))
-    st.metric("서울 날씨", fetch_weather("Seoul"))
-
 # ---- 뉴스 검색 UI ----
-keyword = st.text_input("키워드로 뉴스 검색 (카테고리 구분 없음)", "")
-lang_option = st.radio("기사 언어 선택", ["원본(영어/한국어)", "모든 기사 한국어로 번역"], horizontal=True)
+keyword = st.text_input("키워드로 뉴스 검색", "")
+lang_option = st.radio("기사 언어 선택", ["원본", "모든 기사 한국어로 번역"], horizontal=True)
 translate_to_ko = lang_option == "모든 기사 한국어로 번역"
 
 if st.button("뉴스 찾기"):

@@ -1,93 +1,285 @@
 import streamlit as st
-import feedparser
-from googletrans import Translator
+import requests
+from deep_translator import GoogleTranslator
 import datetime
-import re
 
-# 신뢰 언론사 RSS 피드 (글로벌 + 한국)
-RSS_FEEDS = {
-    '국제': [
-        'http://feeds.bbci.co.uk/news/world/rss.xml',
-        'http://feeds.reuters.com/Reuters/worldNews',
-        'https://apnews.com/rss',
-        'https://www.yna.co.kr/rss/all.do?site=001',  # 연합뉴스 국제 포함
-    ],
-    '경제': [
-        'https://feeds.bbci.co.uk/news/business/rss.xml',
-        'http://feeds.reuters.com/reuters/businessNews',
-        'https://www.bloomberg.co.kr/feed/podcast/etf-report.xml',
-        'https://www.hankyung.com/feed/news',
-        'https://rss.donga.com/economy.xml',
-    ],
-    '사회': [
-        'https://www.hani.co.kr/rss/',
-        'https://rss.donga.com/society.xml',
-        'https://www.chosun.com/arc/outboundfeeds/rss/category/national/?outputType=xml',
-    ],
-    '스포츠': [
-        'http://www.yonhapnewstv.co.kr/browse/feed/14',
-        'https://www.chosun.com/arc/outboundfeeds/rss/category/sports/?outputType=xml',
-        'https://sports.news.naver.com/rss/index.nhn',
-    ]
-}
+NEWSAPI_KEY = "f2f31ac43bcd4f7aab46adf98f73b8dd"
+GNEWS_API_KEY = "3f54020e7158efbf628c9c7227bbdd0f"
 
-translator = Translator()
 
-# HOT 뉴스 키워드 확장 (경제/테크 포함)
-HOT_NEWS_KEYWORDS = [
-    "전쟁", "지진", "태풍", "쓰나미", "폭발", "긴급", "속보", "breaking", "alert", "emergency", "disaster", "전투", "공습", "폭우", "홍수",
-    "테슬라", "tesla", "엔비디아", "nvidia", "코인", "비트코인", "bitcoin", "이더리움", "ethereum", "xrp", "리플", "주식", "환율", "금리", "증시", "stock", "market", "fed", "연준"
-]
+def fetch_gnews_articles(keyword, translate_to_ko=False, lang="ko", max_articles=10):
+    # 검색어 전처리
+    from deep_translator import GoogleTranslator
+    
+    # 키워드 분리 (중요 키워드 추출)
+    # 예: '테슬라 최근 뉴스 알려줘' -> ['tesla', '테슬라']
+    main_keywords = []
+    
+    # 원본 키워드에서 중요 단어 추출
+    important_words = [w.strip() for w in keyword.split() if len(w.strip()) > 1 and w.strip() not in ["알려줘", "알려줄", "알려줄까", "알려줄까요", "알려주세요", "알려주세요", "알려줍니다", "알려줍니까", "알려주", "알려줌", "알려줍니다", "최근", "관련", "기사", "뉴스", "요약", "요약해줘", "있어", "있나요", "있어요", "있나", "있나요", "있나요?", "뭐", "뭐가", "뭐가 있어", "뭐가 있어요", "뭐가 있나요"]]
+    
+    # 중요 키워드 추출
+    for word in important_words:
+        main_keywords.append(word)
+    
+    # 영어 번역 시도
+    try:
+        # 전체 문장 번역
+        keyword_en = GoogleTranslator(source='ko', target='en').translate(keyword)
+        # 개별 키워드 번역
+        for word in important_words:
+            try:
+                en_word = GoogleTranslator(source='ko', target='en').translate(word)
+                if en_word and en_word.lower() not in [w.lower() for w in main_keywords]:
+                    main_keywords.append(en_word)
+            except:
+                pass
+    except Exception:
+        keyword_en = keyword
+    
+    # 검색어가 없으면 기본값 설정
+    if not main_keywords:
+        main_keywords = [keyword]
+    
+    print(f"[검색 키워드] {main_keywords}")
+    
+    results = []
+    langs = ["ko", "en"] if lang == "all" else [lang]
+    
+    # 각 키워드로 검색 시도
+    for use_kw in main_keywords:
+        for l in langs:
+            url = "https://gnews.io/api/v4/search"
+            params = {
+                "q": use_kw,
+                "lang": l,
+                "max": max_articles,
+                "token": GNEWS_API_KEY
+            }
+            try:
+                res = requests.get(url, params=params, timeout=10)
+                data = res.json()
+                print(f"[GNews][{l}] '{use_kw}' totalArticles:", data.get("totalArticles", 0), "/ articles:", len(data.get("articles", [])))
+                
+                for art in data.get("articles", []):
+                    title = art.get("title", "") or ""
+                    summary = art.get("description", "") or ""
+                    link = art.get("url", "")
+                    source = art.get("source", {}).get("name", "")
+                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
+                    
+                    # 중복 검사를 위한 고유 ID 생성
+                    article_id = f"{link}_{title[:20]}"
+                    
+                    # 번역 처리
+                    if translate_to_ko and l != "ko":
+                        try:
+                            title_ko = GoogleTranslator(source='auto', target='ko').translate(title) if title else title
+                        except Exception:
+                            title_ko = title
+                        try:
+                            summary_ko = GoogleTranslator(source='auto', target='ko').translate(summary) if summary else summary
+                        except Exception:
+                            summary_ko = summary
+                    else:
+                        title_ko = title
+                        summary_ko = summary
+                    
+                    # 검색 결과에 추가
+                    results.append({
+                        "id": article_id,
+                        "title": title_ko,
+                        "summary": summary_ko,
+                        "link": link,
+                        "source": source,
+                        "pub_date": pub_date,
+                        "keyword": use_kw
+                    })
+            except Exception as e:
+                print(f"[GNews] 오류 {use_kw}: {e}")
+    
+    # 중복 제거 (고유 ID 기반)
+    unique_results = []
+    seen_ids = set()
+    
+    for article in results:
+        if article["id"] not in seen_ids:
+            seen_ids.add(article["id"])
+            unique_results.append(article)
+    
+    return unique_results, len(unique_results)
 
-# 실시간 HOT 뉴스 추출
-def fetch_hot_news():
-    articles = []
-    now = datetime.datetime.utcnow()
-    two_days_ago = now - datetime.timedelta(days=2)
-    for cat in RSS_FEEDS:
-        for url in RSS_FEEDS[cat]:
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                pub_date = None
-                for date_key in ['published_parsed', 'updated_parsed']:
-                    if date_key in entry and entry[date_key]:
-                        pub_date = datetime.datetime(*entry[date_key][:6])
-                        break
-                if not pub_date or pub_date < two_days_ago:
-                    continue
-                title = entry.title
-                if 'content' in entry and entry.content:
-                    summary = entry.content[0].value
-                elif 'summary' in entry:
-                    summary = entry.summary
+# NewsAPI로 키워드 뉴스 검색 (최대 100개, 언어: 영어/한국어/다국어)
+def fetch_newsapi_articles(keyword, translate_to_ko=False):
+    from deep_translator import GoogleTranslator
+    try:
+        keyword_en = GoogleTranslator(source='ko', target='en').translate(keyword)
+    except Exception:
+        keyword_en = keyword
+    results = []
+    for use_kw in [keyword, keyword_en]:
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": use_kw,
+            "from": (datetime.datetime.utcnow() - datetime.timedelta(days=30)).strftime("%Y-%m-%d"),
+            "sortBy": "publishedAt",
+            "language": "all",  # ko/en/all 모두 시도
+            "pageSize": 100,
+            "apiKey": NEWSAPI_KEY,
+        }
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json()
+        print(f"[NewsAPI] '{use_kw}' totalResults:", data.get("totalResults"), "/ articles:", len(data.get("articles", [])))
+        keywords = [k.strip() for k in keyword.split() if k.strip()]
+        for art in data.get("articles", []):
+            title = art["title"] or ""
+            summary = art["description"] or ""
+            link = art["url"]
+            source = art["source"]["name"]
+            pub_date = art["publishedAt"][:16].replace("T", " ")
+            text = (title + " " + summary).lower()
+            # OR 검색: 하나라도 포함
+            if any(k.lower() in text for k in keywords):
+                if translate_to_ko:
+                    try:
+                        title_ko = GoogleTranslator(source='auto', target='ko').translate(title) if title else title
+                    except Exception:
+                        title_ko = title
+                    try:
+                        summary_ko = GoogleTranslator(source='auto', target='ko').translate(summary) if summary else summary
+                    except Exception:
+                        summary_ko = summary
                 else:
-                    summary = ''
-                texts = [title, summary]
-                found = False
-                for kw in HOT_NEWS_KEYWORDS:
-                    for txt in texts:
-                        if re.search(kw, txt, re.IGNORECASE):
-                            found = True
-                            break
-                    if found:
-                        break
-                if not found:
-                    continue
-                articles.append({
-                    'title': title,
-                    'summary': summary,
-                    'link': entry.link,
-                    'source': feed.feed.title if 'title' in feed.feed else url,
-                    'pub_date': pub_date
+                    title_ko = title
+                    summary_ko = summary
+                results.append({
+                    "title": title_ko,
+                    "summary": summary_ko,
+                    "link": link,
+                    "source": source,
+                    "pub_date": pub_date
                 })
-    articles.sort(key=lambda x: x['pub_date'], reverse=True)
-    return articles[:10]  # 상위 10건만
+    return results, len(results)
+
+# 실시간 HOT 뉴스 추출 - 선진국 중심 인기 뉴스 기반
+def fetch_hot_news():
+    import datetime
+    # 주요 선진국 목록
+    countries = ['us', 'gb', 'jp', 'kr', 'sg', 'de', 'fr', 'ca', 'au']
+    all_articles = []
+    
+    # 1. NewsAPI의 Top Headlines 사용 (국가별 헤드라인)
+    for country in countries:
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            "country": country,
+            "pageSize": 10,  # 국가당 최대 10개
+            "apiKey": NEWSAPI_KEY
+        }
+        try:
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+            if data.get("status") == "ok":
+                articles = data.get("articles", [])
+                print(f"[{country.upper()} 헤드라인] {len(articles)}개 기사 가져옴")
+                for art in articles:
+                    title = art.get("title", "")
+                    summary = art.get("description", "")
+                    link = art.get("url", "")
+                    source = art.get("source", {}).get("name", "")
+                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
+                    all_articles.append({
+                        "title": title,
+                        "summary": summary,
+                        "link": link,
+                        "source": source,
+                        "pub_date": pub_date,
+                        "country": country.upper(),
+                        "type": "headline"
+                    })
+        except Exception as e:
+            print(f"[{country}] 오류: {e}")
+    
+    # 2. NewsAPI의 Everything 에서 인기도 기반 검색
+    url = "https://newsapi.org/v2/everything"
+    from_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+    # 주요 토픽 키워드
+    topics = [
+        "global economy", "international politics", "technology innovation", 
+        "climate change", "health crisis", "breaking news", "major sports"
+    ]
+    
+    for topic in topics:
+        params = {
+            "q": topic,
+            "from": from_date,
+            "sortBy": "popularity",  # 인기도 기반 정렬
+            "language": "en",
+            "pageSize": 5,  # 토픽당 5개
+            "apiKey": NEWSAPI_KEY
+        }
+        try:
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+            if data.get("status") == "ok":
+                articles = data.get("articles", [])
+                print(f"[{topic}] {len(articles)}개 인기 기사 가져옴")
+                for art in articles:
+                    title = art.get("title", "")
+                    summary = art.get("description", "")
+                    link = art.get("url", "")
+                    source = art.get("source", {}).get("name", "")
+                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
+                    all_articles.append({
+                        "title": title,
+                        "summary": summary,
+                        "link": link,
+                        "source": source,
+                        "pub_date": pub_date,
+                        "topic": topic,
+                        "type": "popular"
+                    })
+        except Exception as e:
+            print(f"[{topic}] 오류: {e}")
+    
+    # 3. 중복 제거 (제목 기반)
+    unique_articles = []
+    seen_titles = set()
+    
+    for article in all_articles:
+        # 제목 정리 (공백 제거, 소문자화)
+        # 제목이 None이면 빈 문자열로 처리
+        title = article.get("title", "")
+        if title is None:
+            title = ""
+        normalized_title = title.lower().strip()
+        if normalized_title and normalized_title not in seen_titles:
+            seen_titles.add(normalized_title)
+            unique_articles.append(article)
+    
+    print(f"[총계] 중복 제거 후 {len(unique_articles)}개 기사")
+    
+    # 4. 최신순 + 인기도 기준 혼합 정렬
+    # 헤드라인은 우선순위, 나머지는 최신순
+    headlines = [a for a in unique_articles if a.get("type") == "headline"]
+    popular_articles = [a for a in unique_articles if a.get("type") == "popular"]
+    
+    # 최신순 정렬
+    headlines.sort(key=lambda x: x["pub_date"], reverse=True)
+    popular_articles.sort(key=lambda x: x["pub_date"], reverse=True)
+    
+    # 헤드라인 먼저, 나머지 인기기사 나중
+    final_articles = headlines + popular_articles
+    
+    # 최대 30개만 반환
+    return final_articles[:30]
+
 
 # 실시간 주식 시세 (Yahoo Finance)
 
 
 def fetch_and_translate_news(keyword=None, translate_to_ko=False):
-    articles = []
+    articles = fetch_newsapi_articles(keyword, translate_to_ko=translate_to_ko)
     now = datetime.datetime.utcnow()
     one_month_ago = now - datetime.timedelta(days=31)
     all_feeds = sum(RSS_FEEDS.values(), [])
@@ -114,16 +306,13 @@ def fetch_and_translate_news(keyword=None, translate_to_ko=False):
             else:
                 summary = ''
             link = entry.link
-            is_korean_news = any(domain in url for domain in [
-                'yna.co.kr', 'hani.co.kr', 'donga.com', 'chosun.com', 'naver.com', 'hankyung.com'
-            ])
-            if translate_to_ko or not is_korean_news:
+            if translate_to_ko:
                 try:
-                    title_ko = translator.translate(title, dest='ko').text if not is_korean_news else title
+                    title_ko = translator.translate(title, dest='ko').text
                 except Exception:
                     title_ko = title
                 try:
-                    summary_ko = translator.translate(summary, dest='ko').text if summary and not is_korean_news else summary
+                    summary_ko = translator.translate(summary, dest='ko').text if summary else summary
                 except Exception:
                     summary_ko = summary
             else:
@@ -151,6 +340,14 @@ def fetch_and_translate_news(keyword=None, translate_to_ko=False):
 # Streamlit 웹챗봇 UI
 # ---- UI ----
 st.set_page_config(page_title="실시간 뉴스 챗봇", layout="wide")
+
+# 브라우저 캠시 방지를 위한 코드
+st.markdown("""
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
     .main {max-width: 700px; margin: auto;}
@@ -162,41 +359,278 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌏 실시간 뉴스 챗봇")
-st.write("카테고리와(선택) 키워드를 입력하면 관련 뉴스를 한국어 또는 원본으로 요약해 드립니다.")
 
-# --- HOT 뉴스, 시세, 환율, 날씨 위젯 ---
-hot_news = fetch_hot_news()
-with st.expander("🔥 실시간 속보/Hot News (최근 2일)", expanded=True):
-    if not hot_news:
-        st.info("최근 2일 이내 속보/핫뉴스가 없습니다.")
-    else:
-        for i, art in enumerate(hot_news, 1):
-            st.markdown(f"**{i}. [{art['title']}]({art['link']})**")
-            if art['summary']:
-                st.write(f"요약: {art['summary']}")
-            st.caption(f"출처: {art['source']} | 날짜: {art['pub_date'].strftime('%Y-%m-%d %H:%M')}")
-            st.write("---")
 
-# ---- 뉴스 검색 UI ----
-keyword = st.text_input("키워드로 뉴스 검색", "")
+# ---- 뉴스 검색 UI (챗봇 스타일) ----
+st.markdown("""
+<div style='display:flex; align-items:center; justify-content:center; gap:10px;'>
+    <span style='font-size:2em;'>📰🤖</span>
+    <span style='font-size:1.5em; font-weight:bold;'>뉴스 대화형 챗봇</span>
+    <span style='font-size:2em;'>🔍</span>
+</div>
+""", unsafe_allow_html=True)
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# 기사 언어 선택 메뉴 (검색창 위)
 lang_option = st.radio("기사 언어 선택", ["원본", "모든 기사 한국어로 번역"], horizontal=True)
 translate_to_ko = lang_option == "모든 기사 한국어로 번역"
 
-if st.button("뉴스 찾기"):
-    with st.spinner("뉴스를 불러오는 중..."):
-        articles = fetch_and_translate_news(keyword.strip(), translate_to_ko=translate_to_ko)
-    if not articles:
-        st.warning("관련 뉴스가 없습니다.")
+# 챗봇 스타일 검색 입력창 (돇보기 아이콘, 엔터로 검색)
+with st.form(key="chatbot_form", clear_on_submit=True):
+    col1, col2 = st.columns([20,1])
+    user_input = col1.text_input("검색", "", placeholder="뉴스, 키워드, 인물, 이슈 등 자유롭게 묻어보세요!", label_visibility="collapsed")
+    submitted = col2.form_submit_button("🔍", use_container_width=True)
+
+# --- HOT 뉴스 위젯 ---
+hot_news = fetch_hot_news()
+with st.expander("🔥 최근 글로벌 뉴스 헤드라인", expanded=True):
+    if not hot_news:
+        st.info("최근 7일 이내 뉴스 헤드라인이 없습니다.")
     else:
-        for i, art in enumerate(articles, 1):
+        for i, art in enumerate(hot_news, 1):
+            # 제목(하이퍼링크)만 표시, 요약 내용 제거
             st.markdown(f"**{i}. [{art['title']}]({art['link']})**")
+            # 출처와 날짜만 간략하게 표시
+            st.caption(f"{art['source']} | {art['pub_date']}")
+
+# 예시 질문만 사이드바에 안내 (사이드바 안내만 유지)
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("**예시 질문:**\n- 테슬라 최근 뉴스 알려줘\n- 삼성전자 기사 요약해줘\n- 일론 머스크 관련 기사 뭐 있어?\n- 오늘의 경제 뉴스?")
+
+
+# 기존 대화 내역 표시
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+import openai
+import os
+
+# OpenAI API 키 설정
+def get_openai_api_key():
+    # 시크릿에서 키 가져오기 시도
+    api_key = None
+    try:
+        if "OPENAI_API_KEY" in st.secrets:
+            api_key = st.secrets["OPENAI_API_KEY"]
+            print("Streamlit secrets에서 API 키를 가져왔습니다.")
+    except Exception as e:
+        print(f"Streamlit secrets 오류: {e}")
+    
+    # 환경 변수에서 키 가져오기 시도
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            print("환경 변수에서 API 키를 가져왔습니다.")
+    
+    # 키가 없으면 상수 값 사용 (실제 프로덕션에서는 사용하지 마세요!)
+    if not api_key:
+        # 임시 테스트용 API 키 (실제 프로덕션에서는 사용하지 마세요!)
+        api_key = "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"
+        print("기본 API 키를 사용합니다. 실제 프로덕션에서는 변경해주세요.")
+    
+    return api_key
+
+# 시스템 프롬프트 정의 - 뉴스 챗봇의 역할과 행동 방식 정의
+def get_system_prompt():
+    return """당신은 실시간 뉴스 챗봇입니다. 사용자의 질문을 이해하고 관련 뉴스를 제공하는 역할을 합니다.
+
+다음 규칙을 따르세요:
+1. 사용자가 특정 키워드나 주제에 대한 뉴스를 묻는다면, 그 주제에 대한 뉴스를 요약해서 제공하세요.
+2. 이전 대화의 맥락을 유지하세요. 예를 들어 사용자가 '더 자세히 알려줘' 라고 하면 이전 주제에 대해 더 자세한 정보를 제공하세요.
+3. 사용자가 새로운 주제나 키워드를 언급하면, 그에 대한 새로운 뉴스를 찾아 제공하세요.
+4. 사용자가 이전 대화에서 언급되지 않은 새로운 질문을 하면, 새로운 주제로 인식하고 그에 맞는 뉴스를 찾아 제공하세요.
+5. 사용자가 뉴스가 아닌 일반적인 질문을 하면, 일반적인 정보를 제공하면서 뉴스 관련 질문을 하도록 유도하세요.
+"""
+
+# 대화 맥락을 처리하는 함수
+def analyze_conversation_context(messages):
+    # 맥락이 없으면 기본값 반환
+    if len(messages) < 2:
+        return None, None
+    
+    # 이전 대화에서 키워드 추출
+    last_user_messages = [msg["content"] for msg in messages if msg["role"] == "user"][-3:]
+    last_assistant_messages = [msg["content"] for msg in messages if msg["role"] == "assistant"][-3:]
+    
+    # 이전 대화 내용을 기반으로 현재 주제 추정
+    context_messages = [
+        {"role": "system", "content": "사용자와의 이전 대화를 분석하여 현재 대화의 주제와 키워드를 추출하세요. JSON 형태로 출력하세요: {\"main_topic\": \"주제\", \"keywords\": [\"키워드1\", \"키워드2\"]}"}
+    ]
+    
+    # 이전 대화 내용 추가
+    for user_msg, assistant_msg in zip(last_user_messages, last_assistant_messages):
+        if user_msg and assistant_msg:
+            context_messages.append({"role": "user", "content": user_msg})
+            context_messages.append({"role": "assistant", "content": assistant_msg})
+    
+    # 현재 사용자 메시지 추가
+    context_messages.append({"role": "user", "content": messages[-1]["content"]})
+    
+    try:
+        # GPT를 사용하여 맥락 분석 (최신 API 버전)
+        from openai import OpenAI
+        client = OpenAI(api_key=get_openai_api_key())
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=context_messages,
+            temperature=0.3,
+            max_tokens=150
+        )
+        context_analysis = response.choices[0].message.content
+        
+        # JSON 파싱
+        import json
+        import re
+        
+        # JSON 형태로 추출
+        json_match = re.search(r'\{.*\}', context_analysis, re.DOTALL)
+        if json_match:
+            context_data = json.loads(json_match.group(0))
+            main_topic = context_data.get("main_topic")
+            keywords = context_data.get("keywords", [])
+            return main_topic, keywords
+    except Exception as e:
+        print(f"[Context Analysis] 오류: {e}")
+    
+    # 오류 발생 시 기본값 반환
+    return None, None
+
+# GPT를 통한 뉴스 요약 및 응답 생성
+def ask_gpt(messages, news_articles=None):
+    from openai import OpenAI
+    
+    # OpenAI 클라이언트 생성 (최신 API 버전)
+    client = OpenAI(api_key=get_openai_api_key())
+    
+    # 시스템 프롬프트 추가
+    gpt_messages = [
+        {"role": "system", "content": get_system_prompt()}
+    ]
+    
+    # 이전 대화 내용 추가
+    for msg in messages:
+        gpt_messages.append(msg)
+    
+    # 뉴스 기사 정보 추가
+    if news_articles:
+        news_context = """다음은 사용자의 질문과 관련된 최신 뉴스 기사들입니다. 이 내용을 바탕으로 사용자의 질문에 대해 정보를 제공하세요:\n\n"""
+        
+        for i, art in enumerate(news_articles[:5], 1):
+            news_context += f"{i}. 제목: {art['title']}\n"
             if art['summary']:
-                st.write(f"요약: {art['summary']}")
-            st.caption(f"출처: {art['source']} | 날짜: {art['pub_date'].strftime('%Y-%m-%d %H:%M')}")
-            st.write("---")
+                from bs4 import BeautifulSoup
+                clean_summary = BeautifulSoup(art['summary'], "html.parser").get_text()
+                news_context += f"   요약: {clean_summary[:200]}...\n"
+            news_context += f"   출처: {art['source']} | 날짜: {art['pub_date']}\n\n"
+        
+        gpt_messages.append({"role": "system", "content": news_context})
+    
+    # 추가 지침 제공
+    gpt_messages.append({"role": "system", "content": """
+    사용자의 질문에 대한 답변을 작성하세요. 다음 규칙을 따르세요:
+    1. 뉴스 기사의 정보를 바탕으로 사용자의 질문에 응답하세요.
+    2. 자연스럽고 친절한 톤으로 응답하세요.
+    3. 맥락에 따라 이전 대화를 참조하여 응답하세요.
+    4. 만약 뉴스 기사가 없는 경우, 사용자에게 다른 키워드나 주제를 제안하세요.
+    5. 만약 사용자가 더 자세한 정보나 추가 정보를 요청하면, 이전 기사의 내용을 바탕으로 더 자세히 설명하세요.
+    """})
+    
+    # GPT 응답 생성 (최신 API 버전)
+    try:
+        # API 키 로그 추가 (개발용)
+        api_key = get_openai_api_key()
+        print(f"API 키 사용 중: {api_key[:5]}...{api_key[-4:] if api_key else 'None'}")
+        
+        # 클라이언트 재생성
+        client = OpenAI(api_key=api_key)
+        
+        # API 호출
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=gpt_messages,
+            temperature=0.7,
+            max_tokens=1024
+        )
+        
+        # 응답 추출
+        if hasattr(response.choices[0], 'message') and hasattr(response.choices[0].message, 'content'):
+            return response.choices[0].message.content
+        else:
+            print(f"OpenAI API 응답 구조 오류: {response}")
+            return "죄송합니다. API 응답 형식이 올바르지 않습니다. 다시 시도해주세요."
+    except openai.APIError as e:
+        print(f"OpenAI API 오류: {e}")
+        return f"죄송합니다. OpenAI API 오류가 발생했습니다: {str(e)[:100]}. 다시 시도해주세요."
+    except openai.APIConnectionError as e:
+        print(f"OpenAI API 연결 오류: {e}")
+        return "죄송합니다. API 서버에 연결할 수 없습니다. 인터넷 연결을 확인하고 다시 시도해주세요."
+    except openai.RateLimitError as e:
+        print(f"OpenAI API 요율 제한 오류: {e}")
+        return "죄송합니다. API 요청 한도를 초과했습니다. 잠시 후에 다시 시도해주세요."
+    except openai.AuthenticationError as e:
+        print(f"OpenAI API 인증 오류: {e}")
+        return "죄송합니다. API 키 인증에 문제가 있습니다. 관리자에게 문의해주세요."
+    except Exception as e:
+        print(f"OpenAI API 기타 오류: {type(e).__name__}: {e}")
+        return f"죄송합니다. 응답을 생성하는 중 오류가 발생했습니다: {type(e).__name__}. 다시 시도해주세요."
 
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ---- 도메인 주소 유지 안내 ----
-# 가비아 프레임 포워딩 사용 시 주소창에 www.nulpanji.com 유지 가능(단, 일부 브라우저에서 차단될 수 있음)
-# 완벽한 커스텀 도메인 연결을 원하면 Netlify/Vercel 등으로 마이그레이션 필요
+if submitted and user_input:
+    # 사용자 메시지 추가
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+    
+    # 대화 맥락 분석
+    main_topic, keywords = None, []
+    if len(st.session_state.messages) > 1:
+        main_topic, keywords = analyze_conversation_context(st.session_state.messages)
+    
+    # 맥락이 없거나 새로운 주제인 경우 현재 입력을 기반으로 검색
+    search_query = user_input
+    
+    # 맥락이 있고 현재 입력이 짧은 추가 질문이면 이전 주제 활용
+    if main_topic and len(user_input.strip().split()) <= 5 and not any(kw.lower() in user_input.lower() for kw in ['테슬라', '삼성', '애플', '국제', '경제', '정치', '스포츠', '연예', '코로나', '전쟁', '기후']):
+        follow_up_keywords = ["더", "자세히", "구체적으로", "어떤", "무엇", "언제", "어디서", "왜", "어떻게", "또", "추가로", "다른", "다음"]
+        if any(kw in user_input.lower() for kw in follow_up_keywords) and keywords:
+            # 후속 질문으로 판단되면 이전 키워드 활용
+            search_query = main_topic if main_topic else " ".join(keywords[:2])
+            print(f"[맥락 분석] 후속 질문 감지: '{user_input}' -> 검색어: '{search_query}'")
+    
+    # 뉴스 검색 실행
+    news_articles, total_news = fetch_gnews_articles(search_query, translate_to_ko=translate_to_ko, lang="ko" if translate_to_ko else "en", max_articles=10)
+    
+    # GNews에서 결과가 없으면 NewsAPI도 시도
+    if not news_articles:
+        news_articles2, total_news2 = fetch_newsapi_articles(search_query, translate_to_ko=translate_to_ko)
+        news_articles += news_articles2
+    
+    # 응답 생성 및 표시
+    with st.chat_message("assistant"):
+        if not news_articles:
+            # 뉴스가 없는 경우 GPT만 사용하여 응답 생성
+            gpt_reply = ask_gpt(st.session_state.messages)
+            st.markdown(gpt_reply)
+        else:
+            # 뉴스 기사 표시
+            for i, art in enumerate(news_articles[:5], 1):
+                st.markdown(f"**{i}. [{art['title']}]({art['link']})**")
+                if art['summary']:
+                    from bs4 import BeautifulSoup
+                    clean_summary = BeautifulSoup(art['summary'], "html.parser").get_text()
+                    st.write(clean_summary[:150] + ("..." if len(clean_summary) > 150 else ""))
+                st.caption(f"{art['source']} | {art['pub_date']}")
+            
+            # GPT를 통한 지능적 응답 생성
+            gpt_reply = ask_gpt(st.session_state.messages, news_articles)
+            st.markdown(f"\n\n**해석 및 요약:**\n{gpt_reply}")
+    
+    # 응답 메시지 저장
+    st.session_state.messages.append({"role": "assistant", "content": gpt_reply})
+    
+    # UI 새로고침
+    st.rerun()

@@ -122,7 +122,6 @@ translate_to_ko = lang_option == "한국어 번역"
 news_list = fetch_hot_news()
 
 if not news_list:
-    # 더미 데이터로 UI 정상 동작 확인
     news_list = [{
         "title": "Streamlit 앱은 정상 작동 중입니다!",
         "summary": "API에서 뉴스가 오지 않을 때 이 문구가 뜹니다.",

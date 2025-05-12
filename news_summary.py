@@ -2,69 +2,170 @@ import streamlit as st
 import requests
 from deep_translator import GoogleTranslator
 import datetime
+import os
 
-NEWSAPI_KEY = "3b875f9e3b684d0398ca52bebdbf7a9b"
+def fetch_hot_news():
+    print("[DEBUG] 🔄 fetch_hot_news() 시작됨")
+    NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
+    countries = ['us', 'kr', 'jp']
+    all_articles = []
 
-# 주요 토픽/키워드별로 뉴스 수집
-HOT_TOPICS = [
-    ("테슬라", "tesla"),
-    ("엔비디아", "nvidia"),
-    ("비트코인", "bitcoin"),
-    ("XRP(리플)", "xrp"),
-    ("도지코인", "dogecoin"),
-    ("경제", "economy"),
-    ("사회", "society"),
-    ("국제", "international"),
-    ("스포츠", "sports"),
-    ("자동차", "automobile"),
-    ("모터사이클", "motorcycle")
-]
-
-# 각 토픽별로 뉴스 가져오기 (인기순)
-def fetch_topic_news(topic_en, max_articles=15):
-    url = "https://newsapi.org/v2/everything"
-    params = {
-        "q": topic_en,
-        "from": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)).strftime("%Y-%m-%d"),
-        "sortBy": "popularity",
-        "language": "en",
-        "pageSize": max_articles,
-        "apiKey": NEWSAPI_KEY
-    }
-    try:
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
-        if data.get("status") == "ok":
-            return data.get("articles", [])
-        else:
-            print(f"[{topic_en}] API error: {data}")
-    except Exception as e:
-        print(f"[{topic_en}] 오류: {e}")
-    return []
-                    })
-        except Exception as e:
-            print(f"[{country}] 오류: {e}")
-
-    # 2. NewsAPI의 Everything에서 인기 토픽
-    topics = [
-        "global economy", "international politics", "technology innovation",
-        "climate change", "health crisis", "breaking news", "major sports"
-    ]
-    for topic in topics:
-        url = "https://newsapi.org/v2/everything"
+    # 1. 국가별 헤드라인 (Top Headlines)
+    for country in countries:
+        url = "https://newsapi.org/v2/top-headlines"
         params = {
-            "q": topic,
-            "from": from_date,
-            "sortBy": "popularity",
-            "language": "en",
-            "pageSize": 5,
+            "country": country,
+            "pageSize": 3,
             "apiKey": NEWSAPI_KEY
         }
         try:
             res = requests.get(url, params=params, timeout=10)
             data = res.json()
             if data.get("status") == "ok":
-                for art in data.get("articles", []):
+                articles = data.get("articles", [])
+                print(f"[{country.upper()} 헤드라인] {len(articles)}개 기사 가져옴")
+                for art in articles:
+                    title = art.get("title", "")
+                    summary = art.get("description", "")
+                    link = art.get("url", "")
+                    source = art.get("source", {}).get("name", "")
+                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
+                    all_articles.append({
+                        "title": title,
+                        "summary": summary,
+                        "link": link,
+                        "source": source,
+                        "pub_date": pub_date,
+                        "country": country.upper(),
+                        "type": "headline"
+                    })
+        except Exception as e:
+            print(f"[{country}] 오류: {e}")
+
+    print(f"[DEBUG] 🌍 수집된 전체 기사 수 (중복 포함): {len(all_articles)}")
+
+    # 2. 인기 주제 기반 Everything 검색
+    url = "https://newsapi.org/v2/everything"
+    from_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+    topics = [
+        "global economy", "international politics", "technology innovation"
+    ]
+    for topic in topics:
+        params = {
+            "q": topic,
+            "from": from_date,
+            "sortBy": "popularity",
+            "language": "en",
+            "pageSize": 2,
+            "apiKey": NEWSAPI_KEY
+        }
+        try:
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+            if data.get("status") == "ok":
+                articles = data.get("articles", [])
+                print(f"[{topic}] {len(articles)}개 인기 기사 가져옴")
+                for art in articles:
+                    title = art.get("title", "")
+                    summary = art.get("description", "")
+                    link = art.get("url", "")
+                    source = art.get("source", {}).get("name", "")
+                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
+                    all_articles.append({
+                        "title": title,
+                        "summary": summary,
+                        "link": link,
+                        "source": source,
+                        "pub_date": pub_date,
+                        "topic": topic,
+                        "type": "popular"
+                    })
+        except Exception as e:
+            print(f"[{topic}] 오류: {e}")
+
+    # 3. 중복 제거
+    seen_titles = set()
+    unique_articles = []
+    for article in all_articles:
+        title = (article.get("title") or "").lower().strip()
+        if title and title not in seen_titles:
+            seen_titles.add(title)
+            unique_articles.append(article)
+
+    print(f"[DEBUG] ✅ 중복 제거 후 기사 수: {len(unique_articles)}")
+
+    # 4. 최신순 정렬
+    headlines = [a for a in unique_articles if a.get("type") == "headline"]
+    populars = [a for a in unique_articles if a.get("type") == "popular"]
+    headlines.sort(key=lambda x: x["pub_date"], reverse=True)
+    populars.sort(key=lambda x: x["pub_date"], reverse=True)
+
+    return (headlines + populars)[:30]
+
+# --- Streamlit UI ---
+# Render 호환: PORT 환경변수로 포트 바인딩 (필수)
+import os
+if "PORT" in os.environ:
+    import sys
+    port = int(os.environ["PORT"])
+    # Streamlit은 커맨드라인 인자로 포트 지정 필요
+    sys.argv += ["run", sys.argv[0], "--server.port", str(port)]
+
+st.set_page_config(page_title="🌏 글로벌 뉴스 리더", layout="wide")
+st.title("🌏 글로벌 핫뉴스 리더")
+st.write("지난 7일간 세계적으로 가장 인기있는 뉴스 30개를 보여줍니다.")
+
+lang_option = st.radio("기사 언어 선택", ["영어 원본", "한국어 번역"], horizontal=True)
+translate_to_ko = lang_option == "한국어 번역"
+
+news_list = fetch_hot_news()
+
+if not news_list:
+    st.info("최근 7일 이내 주요 뉴스가 없습니다.")
+else:
+    for i, art in enumerate(news_list, 1):
+        title = art['title']
+        summary = art['summary']
+        if translate_to_ko:
+            try:
+                title = GoogleTranslator(source='auto', target='ko').translate(title) if title else title
+            except Exception:
+                pass
+            try:
+                summary = GoogleTranslator(source='auto', target='ko').translate(summary) if summary else summary
+            except Exception:
+                pass
+        st.markdown(f"**{i}. [{title}]({art['link']})**")
+        if summary:
+            st.write(summary[:150] + ("..." if len(summary) > 150 else ""))
+        st.caption(f"{art.get('source', '')} | {art.get('pub_date', '')}")
+
+                    })
+        except Exception as e:
+            print(f"[{country}] 오류: {e}")
+
+    url = "https://newsapi.org/v2/everything"
+    from_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+    topics = [
+        "global economy", "international politics", "technology innovation"
+    ]  
+
+    for topic in topics:
+        params = {
+            "q": topic,
+            "from": from_date,
+            "sortBy": "popularity",
+            "language": "en",
+            "pageSize": 2,  
+            "apiKey": NEWSAPI_KEY
+        }
+        try:
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+            if data.get("status") == "ok":
+                articles = data.get("articles", [])
+                print(f"[{topic}] {len(articles)}개 인기 기사 가져옴")
+                for art in articles:
                     title = art.get("title", "")
                     summary = art.get("description", "")
                     link = art.get("url", "")

@@ -2,12 +2,5 @@ beautifulsoup4==4.12.2
 feedparser
 googletrans==4.0.0-rc1
 streamlit
-<<<<<<< HEAD
-requests
-=======
-<<<<<<< HEAD
 deep-translator
-=======
 requests
->>>>>>> 017be74 (임시 커밋: pull 전에 상태 저장)
->>>>>>> my-latest-work

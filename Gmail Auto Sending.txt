@@ -1,0 +1,17 @@
+
+google cloud
+서비스 계정 세부정보
+이름 : Gmail Auto Sending
+설명 : G메일자동발송
+이메일: gmail-auto-sending@gmail-api-project-050415.iam.gserviceaccount.com
+고유 ID: 103864445024976864028
+서비스 계정 상태 : 사용 설정됨
+유형에는 2가지 서비스, 사용자
+주 구성원에는 gmail-auto-sending@gmail-api-project-050415.iam.gserviceaccount.com 와 sj.lee@sangsangwoori.com
+이름 : Gmail Auto Sending, 이상준
+역할 : 편집자, 소유자
+상속 : gmail-api-project 050415
+
+
+Gmail Auto Sending
+key = 6e79f6d8015ea55520ac0edb1dfef4e74baf7148

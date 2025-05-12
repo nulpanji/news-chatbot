@@ -1,0 +1,11 @@
+서비스 이름
+sheet-access-bot
+
+설명
+Used for automating Korean comic video creation
+
+이메일
+sheet-access-bot@ivi-kdca-budget-auto.iam.gserviceaccount.com
+
+고유 ID
+104583343418121183823

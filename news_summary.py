@@ -7,6 +7,7 @@ import os
 def fetch_hot_news():
     print("[DEBUG] 🔄 fetch_hot_news() 시작됨")
     NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
+    print(f"[DEBUG] NEWSAPI_KEY: {NEWSAPI_KEY}")
     countries = ['us', 'kr', 'jp']
     all_articles = []
 
@@ -21,6 +22,7 @@ def fetch_hot_news():
         try:
             res = requests.get(url, params=params, timeout=10)
             data = res.json()
+            print(f"[DEBUG] {country} API 응답: {data}")
             if data.get("status") == "ok":
                 articles = data.get("articles", [])
                 print(f"[{country.upper()} 헤드라인] {len(articles)}개 기사 가져옴")
@@ -62,6 +64,7 @@ def fetch_hot_news():
         try:
             res = requests.get(url, params=params, timeout=10)
             data = res.json()
+            print(f"[DEBUG] {topic} API 응답: {data}")
             if data.get("status") == "ok":
                 articles = data.get("articles", [])
                 print(f"[{topic}] {len(articles)}개 인기 기사 가져옴")
@@ -119,21 +122,28 @@ translate_to_ko = lang_option == "한국어 번역"
 news_list = fetch_hot_news()
 
 if not news_list:
-    st.info("최근 7일 이내 주요 뉴스가 없습니다.")
-else:
-    for i, art in enumerate(news_list, 1):
-        title = art['title']
-        summary = art['summary']
-        if translate_to_ko:
-            try:
-                title = GoogleTranslator(source='auto', target='ko').translate(title) if title else title
-            except Exception:
-                pass
-            try:
-                summary = GoogleTranslator(source='auto', target='ko').translate(summary) if summary else summary
-            except Exception:
-                pass
-        st.markdown(f"**{i}. [{title}]({art['link']})**")
-        if summary:
-            st.write(summary[:150] + ("..." if len(summary) > 150 else ""))
-        st.caption(f"{art.get('source', '')} | {art.get('pub_date', '')}")
+    # 더미 데이터로 UI 정상 동작 확인
+    news_list = [{
+        "title": "Streamlit 앱은 정상 작동 중입니다!",
+        "summary": "API에서 뉴스가 오지 않을 때 이 문구가 뜹니다.",
+        "link": "https://newsapi.org",
+        "source": "NewsAPI 테스트",
+        "pub_date": "2025-05-13"
+    }]
+
+for i, art in enumerate(news_list, 1):
+    title = art['title']
+    summary = art['summary']
+    if translate_to_ko:
+        try:
+            title = GoogleTranslator(source='auto', target='ko').translate(title) if title else title
+        except Exception:
+            pass
+        try:
+            summary = GoogleTranslator(source='auto', target='ko').translate(summary) if summary else summary
+        except Exception:
+            pass
+    st.markdown(f"**{i}. [{title}]({art['link']})**")
+    if summary:
+        st.write(summary[:150] + ("..." if len(summary) > 150 else ""))
+    st.caption(f"{art.get('source', '')} | {art.get('pub_date', '')}")

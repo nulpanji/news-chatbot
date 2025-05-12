@@ -1,6 +1,6 @@
-beautifulsoup4==4.12.2
-feedparser
-googletrans==4.0.0-rc1
 streamlit
 deep-translator
 requests
+beautifulsoup4
+feedparser
+googletrans

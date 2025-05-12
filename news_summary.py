@@ -5,39 +5,42 @@ import datetime
 
 NEWSAPI_KEY = "3b875f9e3b684d0398ca52bebdbf7a9b"
 
-# 지난 7일간의 글로벌 주요 뉴스(속보/핫/인기) 30개 반환
-def fetch_hot_news():
-    countries = ['us', 'gb', 'jp', 'kr', 'sg', 'de', 'fr', 'ca', 'au']
-    all_articles = []
-    now = datetime.datetime.now(datetime.timezone.utc)
-    from_date = (now - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+# 주요 토픽/키워드별로 뉴스 수집
+HOT_TOPICS = [
+    ("테슬라", "tesla"),
+    ("엔비디아", "nvidia"),
+    ("비트코인", "bitcoin"),
+    ("XRP(리플)", "xrp"),
+    ("도지코인", "dogecoin"),
+    ("경제", "economy"),
+    ("사회", "society"),
+    ("국제", "international"),
+    ("스포츠", "sports"),
+    ("자동차", "automobile"),
+    ("모터사이클", "motorcycle")
+]
 
-    # 1. NewsAPI의 Top Headlines (국가별)
-    for country in countries:
-        url = "https://newsapi.org/v2/top-headlines"
-        params = {
-            "country": country,
-            "pageSize": 10,
-            "apiKey": NEWSAPI_KEY
-        }
-        try:
-            res = requests.get(url, params=params, timeout=10)
-            data = res.json()
-            if data.get("status") == "ok":
-                for art in data.get("articles", []):
-                    title = art.get("title", "")
-                    summary = art.get("description", "")
-                    link = art.get("url", "")
-                    source = art.get("source", {}).get("name", "")
-                    pub_date = art.get("publishedAt", "")[:16].replace("T", " ")
-                    all_articles.append({
-                        "title": title,
-                        "summary": summary,
-                        "link": link,
-                        "source": source,
-                        "pub_date": pub_date,
-                        "country": country.upper(),
-                        "type": "headline"
+# 각 토픽별로 뉴스 가져오기 (인기순)
+def fetch_topic_news(topic_en, max_articles=15):
+    url = "https://newsapi.org/v2/everything"
+    params = {
+        "q": topic_en,
+        "from": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)).strftime("%Y-%m-%d"),
+        "sortBy": "popularity",
+        "language": "en",
+        "pageSize": max_articles,
+        "apiKey": NEWSAPI_KEY
+    }
+    try:
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json()
+        if data.get("status") == "ok":
+            return data.get("articles", [])
+        else:
+            print(f"[{topic_en}] API error: {data}")
+    except Exception as e:
+        print(f"[{topic_en}] 오류: {e}")
+    return []
                     })
         except Exception as e:
             print(f"[{country}] 오류: {e}")
